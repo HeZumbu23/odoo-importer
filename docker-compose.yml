@@ -1,0 +1,117 @@
+name: odoo-importer
+
+# Stack:
+#   db        PostgreSQL für Odoo und die Staging-Datenbank des Importers
+#   odoo-init einmaliger Job: legt die Odoo-Datenbank an und installiert crm/contacts
+#   odoo      Odoo (Test-/Staging-Instanz; der Importer kann auch auf euer Produktivsystem zeigen)
+#   imap      Dovecot-IMAP-Server (Archiv/Staging-Postfach, Testdaten)
+#   importer  Web-Oberfläche + Worker: IMAP -> Regeln -> Prüfung -> Odoo
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-odoo}
+      POSTGRES_DB: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  odoo-init:
+    image: odoo:${ODOO_VERSION:-18.0}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: ${POSTGRES_PASSWORD:-odoo}
+    command: >-
+      odoo -d ${ODOO_DB:-odoo} -i crm,contacts --without-demo=all
+      --load-language=${ODOO_LANG:-de_DE} --stop-after-init
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./odoo/odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./odoo/addons:/mnt/extra-addons
+    restart: "no"
+
+  odoo:
+    image: odoo:${ODOO_VERSION:-18.0}
+    depends_on:
+      odoo-init:
+        condition: service_completed_successfully
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: ${POSTGRES_PASSWORD:-odoo}
+    command: odoo -d ${ODOO_DB:-odoo} --db-filter=^${ODOO_DB:-odoo}$$
+    ports:
+      - "${ODOO_PORT:-8069}:8069"
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./odoo/odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./odoo/addons:/mnt/extra-addons
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8069/web/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  imap:
+    build: ./imap
+    environment:
+      # Komma-getrennt: benutzer:passwort,benutzer2:passwort2
+      IMAP_USERS: ${IMAP_USERS:-archiv:archiv,vertrieb:vertrieb}
+    ports:
+      - "${IMAP_PORT:-1143}:143"
+    volumes:
+      - imap-data:/srv/mail
+    restart: unless-stopped
+
+  importer:
+    build: ./importer
+    depends_on:
+      db:
+        condition: service_healthy
+      imap:
+        condition: service_started
+      odoo:
+        condition: service_started
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://odoo:${POSTGRES_PASSWORD:-odoo}@db:5432/importer
+      ODOO_URL: ${ODOO_URL:-http://odoo:8069}
+      ODOO_PUBLIC_URL: ${ODOO_PUBLIC_URL:-http://localhost:8069}
+      ODOO_DB: ${ODOO_DB:-odoo}
+      ODOO_USER: ${ODOO_USER:-admin}
+      ODOO_PASSWORD: ${ODOO_PASSWORD:-admin}
+      UI_USER: ${UI_USER:-admin}
+      UI_PASSWORD: ${UI_PASSWORD:-admin}
+      WORKER_INTERVAL: ${WORKER_INTERVAL:-0}
+      AUTO_APPROVE: ${AUTO_APPROVE:-true}
+      CONFIG_FILE: /config/importer.yaml
+      RULES_FILE: /config/rules.yaml
+      DATA_DIR: /data
+    ports:
+      - "${IMPORTER_PORT:-8000}:8000"
+    volumes:
+      - ./importer/config:/config
+      - importer-data:/data
+      - ./import-drop:/import
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  odoo-data:
+  imap-data:
+  importer-data:

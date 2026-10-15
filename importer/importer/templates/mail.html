@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, action_badge, lead_link, partner_link %}
+{% block title %}#{{ mail.id }} {{ mail.subject }}{% endblock %}
+{% block content %}
+{% set ex = (mail.options or {}).get('extract') or {} %}
+<p class="navrow"><a href="{{ back }}">← zurück zur Liste</a>
+  <span class="grow"></span>
+  {% if pending_total %}<small>{{ pending_total }} Mails zu prüfen</small>{% endif %}
+  {% if next_id %}<a class="btnlink" href="/mails/{{ next_id }}">Nächste offene Mail →</a>{% endif %}</p>
+<div class="detail">
+  <article class="mailview">
+    <h1>{{ mail.subject or '(ohne Betreff)' }}</h1>
+    <table class="kv">
+      <tr><th>Von</th><td>{{ mail.from_name }} &lt;{{ mail.from_email }}&gt;</td></tr>
+      <tr><th>An</th><td>{% for n, a in mail.to_addrs %}{{ n }} &lt;{{ a }}&gt;{{ ', ' if not loop.last }}{% endfor %}</td></tr>
+      {% if mail.cc_addrs %}<tr><th>Cc</th><td>{% for n, a in mail.cc_addrs %}{{ n }} &lt;{{ a }}&gt;{{ ', ' if not loop.last }}{% endfor %}</td></tr>{% endif %}
+      <tr><th>Datum</th><td>{{ mail.date.strftime('%d.%m.%Y %H:%M') if mail.date else '–' }} (UTC)</td></tr>
+      <tr><th>Postfach</th><td>{{ mail.account }} / {{ mail.folder }} (UID {{ mail.uid }}) · {{ 'ausgehend' if mail.direction == 'out' else 'eingehend' }} · {{ (mail.size / 1024)|round(1) }} KB</td></tr>
+      <tr><th>Message-ID</th><td><code>{{ mail.message_id or '–' }}</code></td></tr>
+      {% if mail.in_reply_to %}<tr><th>Antwort auf</th><td><code>{{ mail.in_reply_to }}</code></td></tr>{% endif %}
+      {% if mail.attachments %}<tr><th>Anhänge</th><td>{% for a in mail.attachments %}{{ a.filename }} <small>({{ a.content_type }}, {{ (a.size / 1024)|round(1) }} KB)</small><br>{% endfor %}</td></tr>{% endif %}
+    </table>
+    <pre class="body">{{ mail.body_text }}</pre>
+    <p><a href="/mails/{{ mail.id }}/raw">Original (.eml) herunterladen</a></p>
+  </article>
+
+  <aside class="decision">
+    <h2>Entscheidung {{ status_badge(mail.status) }}</h2>
+    <p class="reason">{{ action_badge(mail.action) }} <small>{{ mail.reason or '' }}</small></p>
+    {% if mail.error %}<p class="err">{{ mail.error }}</p>{% endif %}
+
+    {% if mail.status == 'done' %}
+      <p>In Odoo übertragen:
+        {% if mail.odoo_lead_id %}{{ lead_link(mail.odoo_lead_id) }}{% endif %}
+        {% if mail.odoo_partner_id %}{{ partner_link(mail.odoo_partner_id) }}{% endif %}
+      </p>
+    {% else %}
+    <form method="post" action="/mails/{{ mail.id }}">
+      <fieldset class="actions">
+        {% for a in Action.ALL %}
+        <label><input type="radio" name="action" value="{{ a }}" {{ 'checked' if mail.action == a or (not mail.action and a == 'review') }}> {{ Action.LABELS[a] }}</label>
+        {% endfor %}
+      </fieldset>
+
+      <div class="picker" id="picker">
+        <div class="pickhead">Ziel-Lead <small>(bei „An Lead anhängen“)</small></div>
+        <input type="hidden" name="target_lead_id" id="target_lead_id" value="{{ mail.target_lead_id or '' }}">
+        <div id="chosen" class="chosen" {% if not mail.target_lead_id %}hidden{% endif %}>
+          <span id="chosen_text">Lead #{{ mail.target_lead_id }}</span>
+          {% if mail.target_lead_id %}<a href="{{ odoo_url }}/web#id={{ mail.target_lead_id }}&model=crm.lead&view_type=form" target="_blank" rel="noopener">in Odoo ↗</a>{% endif %}
+          <button type="button" class="ghost" id="chosen_clear">entfernen</button>
+        </div>
+        {% if parent and not mail.target_lead_id %}<p class="hint">Automatisch: gleicher Lead wie Bezugs-Mail <a href="/mails/{{ parent.id }}">#{{ parent.id }}</a> ({{ Status.LABELS[parent.status] }}) – <i>{{ parent.subject|truncate(40) }}</i></p>{% endif %}
+        {% if suggestions %}
+        <div class="suggest"><small>Leads dieses Kontakts:</small>
+          <ul id="suggest_list">{% for l in suggestions %}
+            <li><button type="button" class="pick" data-id="{{ l.id }}" data-name="{{ l.name }}">#{{ l.id }} {{ l.name }}</button>
+              <small>{{ l.stage_id[1] if l.stage_id else '' }}{{ ' · archiviert' if not l.active }}</small></li>
+          {% endfor %}</ul>
+        </div>
+        {% elif odoo_error %}<p class="err"><small>Odoo nicht erreichbar: {{ odoo_error }}</small></p>{% endif %}
+        <input type="search" id="lead_q" placeholder="Lead suchen: Titel, Kontakt, Firma, E-Mail oder ID …" autocomplete="off">
+        <ul id="lead_results" class="results"></ul>
+      </div>
+
+      <label>Lead-Titel (bei „Neuer Lead“)
+        <input name="lead_name" value="{{ (mail.options or {}).get('lead_name') or '' }}" placeholder="{{ (mail.options or {}).get('lead', {}).get('name', '{subject}') }}">
+      </label>
+      <fieldset class="contact">
+        <legend><label><input type="checkbox" name="create_contact" value="1" {{ 'checked' if (mail.options or {}).get('create_contact', True) }}> Kontakt anlegen / zuordnen</label></legend>
+        <label>E-Mail <input name="contact_email" value="{{ ex.get('email', '') }}" placeholder="{{ mail.counterpart_email }}"></label>
+        <label>Name <input name="contact_name" value="{{ ex.get('contact_name', '') }}" placeholder="{{ mail.counterpart_name }}"></label>
+        <label>Firma <input name="partner_name" value="{{ ex.get('partner_name', '') }}" placeholder="optional"></label>
+        {% if ex.get('phone') %}<small>Telefon (extrahiert): {{ ex.phone }}</small>{% endif %}
+      </fieldset>
+
+      <fieldset class="learn">
+        <legend>Für die Zukunft merken</legend>
+        <label><input type="radio" name="learn" value="" checked> nein</label>
+        <label><input type="radio" name="learn" value="email"> immer für {{ mail.counterpart_email or '–' }}</label>
+        <label><input type="radio" name="learn" value="domain"> immer für @{{ mail.counterpart_domain or '–' }}</label>
+        <label><input type="checkbox" name="learn_auto" value="1"> künftig ohne Rückfrage</label>
+      </fieldset>
+
+      <div class="buttons">
+        <button name="submit" value="approve" class="primary">Freigeben</button>
+        <button name="submit" value="apply_now">Freigeben &amp; sofort übertragen</button>
+        <button name="submit" value="save" class="ghost">Nur speichern</button>
+        <button name="submit" value="ignore" class="ghost">Ignorieren</button>
+      </div>
+    </form>
+    {% endif %}
+
+    {% if children %}<h3>Antworten in diesem Import</h3>
+      <ul>{% for c in children %}<li><a href="/mails/{{ c.id }}">#{{ c.id }}</a> {{ c.subject }} {{ status_badge(c.status) }}</li>{% endfor %}</ul>{% endif %}
+    {% if same_sender %}<h3>Weitere Mails von/an {{ mail.counterpart_email }}</h3>
+      <ul>{% for c in same_sender %}<li><a href="/mails/{{ c.id }}">#{{ c.id }}</a> {{ c.date.strftime('%d.%m.%y') if c.date }} {{ c.subject|truncate(50) }} {{ action_badge(c.action) }}</li>{% endfor %}</ul>{% endif %}
+  </aside>
+</div>
+<script>
+(function () {
+  const q = document.getElementById('lead_q'); if (!q) return;
+  const list = document.getElementById('lead_results');
+  const hidden = document.getElementById('target_lead_id');
+  const chosen = document.getElementById('chosen');
+  const chosenText = document.getElementById('chosen_text');
+  const odoo = {{ odoo_url|tojson }};
+  let timer;
+  function choose(id, name) {
+    hidden.value = id;
+    chosenText.textContent = '#' + id + ' ' + (name || '');
+    chosen.hidden = false;
+    document.querySelector('input[name=action][value=attach_to_lead]').checked = true;
+    list.innerHTML = ''; q.value = '';
+  }
+  document.getElementById('chosen_clear').onclick = () => { hidden.value = ''; chosen.hidden = true; };
+  document.querySelectorAll('button.pick').forEach(b => b.onclick = () => choose(b.dataset.id, b.dataset.name));
+  q.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (q.value.trim().length < 2) { list.innerHTML = ''; return; }
+      list.innerHTML = '<li class="muted">suche …</li>';
+      try {
+        const r = await fetch('/api/leads?q=' + encodeURIComponent(q.value), {credentials: 'same-origin'});
+        const data = await r.json();
+        if (data.error) { list.innerHTML = '<li class="err"></li>'; list.firstChild.textContent = data.error; return; }
+        list.innerHTML = '';
+        if (!data.leads.length) { list.innerHTML = '<li class="muted">keine Treffer</li>'; return; }
+        data.leads.forEach(l => {
+          const li = document.createElement('li');
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'pick';
+          b.textContent = '#' + l.id + ' ' + l.name;
+          b.onclick = () => choose(l.id, l.name);
+          const sm = document.createElement('small');
+          sm.textContent = ' ' + [l.partner || l.email, l.stage, l.won ? 'gewonnen' : '', l.active ? '' : 'archiviert'].filter(Boolean).join(' · ');
+          li.append(b, sm); list.append(li);
+        });
+      } catch (e) { list.innerHTML = '<li class="err">Suche fehlgeschlagen</li>'; }
+    }, 250);
+  });
+  // Auswahl einer anderen Aktion für Anhängen-Radio setzt keinen Lead zurück; Enter in der Suche sendet nichts ab
+  q.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+})();
+</script>
+{% endblock %}

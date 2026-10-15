@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, action_badge, lead_link %}
+{% block title %}Mails{% endblock %}
+{% block content %}
+<div class="counts">
+  <a href="/mails" class="{{ 'active' if not f.status }}">Alle <b>{{ counts.values()|sum }}</b></a>
+  {% for st in Status.ALL %}
+  <a href="/mails?status={{ st }}" class="{{ 'active' if f.status == st }}">{{ Status.LABELS[st] }} <b>{{ counts.get(st, 0) }}</b></a>
+  {% endfor %}
+</div>
+
+<form class="filters" method="get" action="/mails">
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Betreff / Absender suchen">
+  <select name="status"><option value="">Status: alle</option>
+    {% for st in Status.ALL %}<option value="{{ st }}" {{ 'selected' if f.status == st }}>{{ Status.LABELS[st] }}</option>{% endfor %}</select>
+  <select name="action"><option value="">Aktion: alle</option>
+    {% for a in Action.ALL %}<option value="{{ a }}" {{ 'selected' if f.action == a }}>{{ Action.LABELS[a] }}</option>{% endfor %}</select>
+  <select name="rule"><option value="">Regel: alle</option>
+    {% for r in rules %}<option {{ 'selected' if f.rule == r }}>{{ r }}</option>{% endfor %}</select>
+  <select name="account"><option value="">Konto: alle</option>
+    {% for a in accounts %}<option {{ 'selected' if f.account == a }}>{{ a }}</option>{% endfor %}</select>
+  <button>Filtern</button>
+</form>
+
+<form method="post" action="/mails/bulk" id="bulk">
+  {% for k, v in f.items() %}<input type="hidden" name="f_{{ k }}" value="{{ v }}">{% endfor %}
+  <div class="bulkbar">
+    <select name="scope">
+      <option value="selected">markierte</option>
+      <option value="filtered">alle {{ total }} gefilterten</option>
+    </select>
+    <button name="op" value="approve" class="primary">Vorschlag freigeben</button>
+    <button name="op" value="ignore">Ignorieren</button>
+    <span class="sep"></span>
+    <select name="action">{% for a in Action.ALL %}<option value="{{ a }}">{{ Action.LABELS[a] }}</option>{% endfor %}</select>
+    <input name="target_lead_id" size="8" placeholder="Lead-ID">
+    <button name="op" value="set_action">Aktion setzen</button>
+    <span class="sep"></span>
+    <button name="op" value="to_review" class="ghost">Zurück zur Prüfung</button>
+    <button name="op" value="reclassify" class="ghost">Regeln neu</button>
+  </div>
+
+  <table class="mails">
+    <thead><tr>
+      <th><input type="checkbox" onclick="document.querySelectorAll('input[name=ids]').forEach(c => c.checked = this.checked)"></th>
+      <th>#</th><th>Datum</th><th>Kontakt</th><th>Betreff</th><th>Vorschlag</th><th>Regel / Grund</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+    {% for m in mails %}
+      <tr class="dir-{{ m.direction }}">
+        <td><input type="checkbox" name="ids" value="{{ m.id }}"></td>
+        <td><a href="/mails/{{ m.id }}">{{ m.id }}</a></td>
+        <td class="nowrap">{{ m.date.strftime('%d.%m.%Y %H:%M') if m.date else '–' }}</td>
+        <td class="contact">
+          <span class="dir" title="{{ 'ausgehend' if m.direction == 'out' else 'eingehend' }}">{{ '→' if m.direction == 'out' else '←' }}</span>
+          {{ m.counterpart_name or m.counterpart_email }}<br><small>{{ m.counterpart_email }} · {{ m.account }}/{{ m.folder }}</small>
+        </td>
+        <td><a href="/mails/{{ m.id }}">{{ m.subject or '(ohne Betreff)' }}</a>{% if m.attachments %} <span title="{{ m.attachments|length }} Anhänge">📎</span>{% endif %}</td>
+        <td class="nowrap">{{ action_badge(m.action) }}
+          {% if m.action == 'attach_to_lead' %}<br><small>{% if m.target_lead_id %}{{ lead_link(m.target_lead_id) }}{% elif m.thread_parent_id %}wie <a href="/mails/{{ m.thread_parent_id }}">#{{ m.thread_parent_id }}</a>{% endif %}</small>{% endif %}
+          {% if m.odoo_lead_id and m.status == 'done' %}<br><small>{{ lead_link(m.odoo_lead_id) }}</small>{% endif %}
+        </td>
+        <td><small>{{ m.reason or '' }}</small>{% if m.error %}<br><small class="err">{{ m.error }}</small>{% endif %}</td>
+        <td>{{ status_badge(m.status) }}{% if m.decided_by == 'user' %} <span title="manuell entschieden">👤</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="empty">Keine Mails für diesen Filter.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</form>
+
+<div class="pager">
+  {% if page > 1 %}<a href="/mails?{{ qs }}&page={{ page - 1 }}">← zurück</a>{% endif %}
+  Seite {{ page }} / {{ pages }} · {{ total }} Mails
+  {% if page < pages %}<a href="/mails?{{ qs }}&page={{ page + 1 }}">weiter →</a>{% endif %}
+</div>
+{% endblock %}

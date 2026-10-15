@@ -1,0 +1,43 @@
+# Konfiguration des Importers. ${VAR} bzw. ${VAR:-standard} wird aus der Umgebung (.env) ersetzt.
+
+# Eigene Domains: Mails VON diesen Domains gelten als ausgehend, Kontakt ist dann der Empfänger.
+own_domains:
+  - meinefirma.de
+
+fetch:
+  batch_size: 100      # Nachrichten pro IMAP-FETCH
+  max_size_mb: 40      # größere Nachrichten werden nicht abgerufen (Status "Fehler")
+
+apply:
+  batch_size: 200
+
+accounts:
+  # Lokaler Dovecot-Container (Testdaten / Archiv-Postfach)
+  - name: archiv
+    host: ${IMAP_HOST:-imap}
+    port: ${IMAP_INTERNAL_PORT:-143}
+    ssl: false
+    username: ${IMAP_ARCHIV_USER:-archiv}
+    password: ${IMAP_ARCHIV_PASSWORD:-archiv}
+    folders: ["*"]                     # alle Ordner; Glob-Muster wie "Archiv/*" möglich
+    exclude_folders: [Trash, Junk, Drafts, "Trash/*"]
+
+  - name: vertrieb
+    host: ${IMAP_HOST:-imap}
+    port: ${IMAP_INTERNAL_PORT:-143}
+    ssl: false
+    username: ${IMAP_VERTRIEB_USER:-vertrieb}
+    password: ${IMAP_VERTRIEB_PASSWORD:-vertrieb}
+    folders: [INBOX, Sent]
+
+  # Beispiel: echtes Postfach (z.B. Exchange/M365 per IMAP, Strato, IONOS ...)
+  - name: produktiv
+    enabled: false
+    host: ${PROD_IMAP_HOST:-imap.example.com}
+    port: 993
+    ssl: true
+    username: ${PROD_IMAP_USER:-}
+    password: ${PROD_IMAP_PASSWORD:-}
+    folders: [INBOX, "Gesendete Elemente", "Archiv/*"]
+    exclude_folders: ["Gelöschte Elemente", "Junk-E-Mail", Entwürfe]
+    since: 2022-01-01                  # optional: nur Mails ab diesem Datum

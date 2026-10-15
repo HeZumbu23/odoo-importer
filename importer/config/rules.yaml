@@ -1,0 +1,116 @@
+# Regeln für den Mail-Import
+# ==========================
+# Regeln werden von oben nach unten geprüft; die erste passende Regel bestimmt den Vorschlag.
+#
+# Aktionen (action):
+#   new_lead        neuen Lead/Chance anlegen, Mail im Chatter ablegen
+#   attach_to_lead  Mail an bestehenden Lead hängen (Ziel: Betreff-Referenz, Thread, offener Lead des Absenders)
+#   create_contact  nur Kontakt anlegen/finden und Mail am Kontakt ablegen
+#   ignore          nicht importieren
+#   review          kein Vorschlag, Mensch entscheidet
+#
+# auto: true  -> wird ohne Rückfrage freigegeben (nur wenn AUTO_APPROVE=true), sonst "zu prüfen"
+#
+# Bedingungen (alle müssen zutreffen; Texte sind reguläre Ausdrücke, Groß/klein egal):
+#   from, to, subject, body, folder, account, counterpart (= Kunde: Absender bzw. bei ausgehenden Mails Empfänger)
+#   header: {Header-Name: regex}
+#   direction: in | out
+#   has_attachment: true|false
+#   thread: true                  Mail gehört zu einem Thread mit Lead (im Import oder in Odoo)
+#   sender_has_open_lead: true    Kunde hat in Odoo einen offenen Lead
+#   known_partner: true|false     Kunde existiert in Odoo als Kontakt
+#   subject_ref: regex mit Gruppe für die Lead-ID, z.B. "\[Lead#(\d+)\]"
+#   any: [ {...}, {...} ]   all: [...]   not: {...}
+#
+# Optionen je Regel:
+#   create_contact: true|false        Kontakt anlegen, falls noch nicht vorhanden
+#   company_from_domain: true|false   Firma aus der Mail-Domain anlegen (nicht bei Freemailern)
+#   extract: {feld: regex}            Werte aus dem Mailtext (email, contact_name, phone, partner_name)
+#   lead: {name: "...{subject}...", type: opportunity|lead, tags: [..], team: "Name", user: login|null, priority: 0-3}
+#   target: [subject_ref, thread, sender]   Reihenfolge der Zielsuche bei attach_to_lead
+
+defaults:
+  action: review
+  create_contact: true
+  company_from_domain: true
+  lead:
+    # "lead" nur verwenden, wenn in den CRM-Einstellungen "Leads" aktiviert ist
+    type: opportunity
+    tags: [Mail-Import]
+
+rules:
+  - name: Abwesenheitsnotiz / Auto-Reply
+    any:
+      - header: {Auto-Submitted: "^auto-(replied|generated)"}
+      - header: {X-Autoreply: "."}
+      - subject: "^(Automatische Antwort|Abwesenheitsnotiz|Out of Office|Auto(matic)? ?reply)"
+    action: ignore
+    auto: true
+
+  - name: Unzustellbar (Bounce)
+    any:
+      - from: "^(mailer-daemon|postmaster)@"
+      - header: {Content-Type: "multipart/report"}
+    action: ignore
+    auto: true
+
+  - name: Newsletter / Mailingliste
+    any:
+      - header: {List-Unsubscribe: "."}
+      - header: {Precedence: "^(bulk|list|junk)$"}
+    action: ignore
+    auto: true
+
+  - name: Antwort in bestehendem Thread
+    thread: true
+    action: attach_to_lead
+    target: [thread]
+    auto: true
+
+  - name: Lead-Referenz im Betreff
+    subject_ref: "\\[Lead\\s*#?(\\d+)\\]"
+    action: attach_to_lead
+    target: [subject_ref]
+    auto: true
+
+  # Kontaktformular der Website: Absender ist noreply, Kundendaten stehen im Text
+  - name: Website-Kontaktformular
+    from: "^noreply@meinefirma\\.de$"
+    subject: "Kontaktanfrage"
+    action: new_lead
+    auto: true
+    extract:
+      contact_name: "^Name:\\s*(.+)$"
+      email: "^E-Mail:\\s*(\\S+@\\S+)"
+      phone: "^Telefon:\\s*(.+)$"
+      partner_name: "^Firma:\\s*(.+)$"
+    lead:
+      name: "Website: {partner_name} {contact_name}"
+      tags: [Website, Mail-Import]
+
+  - name: Interne Mail
+    counterpart: "@meinefirma\\.de$"
+    action: ignore
+    auto: true
+
+  # Entscheidungen aus der Oberfläche ("für die Zukunft merken") greifen hier
+  - use: learned
+
+  - name: Kunde mit offenem Lead schreibt erneut
+    direction: in
+    sender_has_open_lead: true
+    action: attach_to_lead
+    target: [sender]
+    auto: false
+
+  - name: Neue Anfrage von unbekanntem Absender
+    direction: in
+    known_partner: false
+    action: new_lead
+    auto: false
+
+  - name: Bekannter Kontakt ohne offenen Lead
+    direction: in
+    known_partner: true
+    action: create_contact
+    auto: false

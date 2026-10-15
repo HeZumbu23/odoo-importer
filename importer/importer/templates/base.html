@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Mail-Import{% endblock %} · Odoo Mail Importer</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/mails?status=pending">✉ → Odoo</a>
+  <nav>
+    <a href="/mails?status=pending">Zu prüfen</a>
+    <a href="/mails?status=approved">Freigegeben</a>
+    <a href="/mails">Alle Mails</a>
+    <a href="/rules">Regeln</a>
+    <a href="/jobs">Protokoll</a>
+    <a href="{{ odoo_url }}/web" target="_blank" rel="noopener">Odoo ↗</a>
+  </nav>
+</header>
+<section class="jobbar">
+  <form method="post" action="/jobs/fetch"><button {% if running %}disabled{% endif %} title="Neue Mails per IMAP abrufen">① Abrufen</button></form>
+  <form method="post" action="/jobs/classify"><button {% if running %}disabled{% endif %} title="Regeln auf neue Mails anwenden">② Regeln anwenden</button></form>
+  <form method="post" action="/jobs/apply"><button class="primary" {% if running %}disabled{% endif %} title="Freigegebene Mails nach Odoo übertragen">③ Nach Odoo übertragen</button></form>
+  <form method="post" action="/jobs/cycle"><button {% if running %}disabled{% endif %}>①+②+③</button></form>
+  <form method="post" action="/jobs/reclassify"><button class="ghost" {% if running %}disabled{% endif %} title="Offene Vorschläge mit aktuellen Regeln neu berechnen (eigene Entscheidungen bleiben)">Regeln neu anwenden</button></form>
+  <div class="jobstate">
+    {% if running %}<span class="spinner"></span> läuft: <b>{{ running }}</b> – <a href="">aktualisieren</a>
+    {% elif jobs %}{% set j = jobs[0] %}
+      <span class="{{ 'ok' if j.ok else 'err' if j.ok is not none else '' }}">Letzter Lauf ({{ j.job }}, {{ j.started_at.strftime('%d.%m. %H:%M') }}):</span> {{ j.summary|truncate(160) }}
+    {% endif %}
+  </div>
+</section>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

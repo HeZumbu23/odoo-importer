@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import action_badge %}
+{% block title %}Regeln{% endblock %}
+{% block content %}
+<h1>Regeln</h1>
+<p>Regeln werden von oben nach unten geprüft, die erste passende gewinnt. Bearbeiten: <code>importer/config/rules.yaml</code>
+  (wird bei jedem Lauf neu geladen). Automatische Freigabe ist {{ '<b>aktiv</b>'|safe if settings.auto_approve else '<b>deaktiviert</b> (AUTO_APPROVE=false) – alles landet in „zu prüfen“'|safe }}.</p>
+{% if error %}<p class="err">Fehler in rules.yaml: {{ error }}</p>{% endif %}
+{% if ruleset %}
+<table class="mails">
+  <thead><tr><th>#</th><th>Name</th><th>Aktion</th><th>Auto</th><th>Bedingungen</th><th>Treffer</th></tr></thead>
+  <tbody>
+  {% for e in ruleset.entries %}
+    {% if e.name is defined %}
+    <tr><td>{{ loop.index }}</td><td>{{ e.name }}</td><td>{{ action_badge(e.action) }}</td><td>{{ '✔' if e.auto }}</td>
+      <td><code>{{ e.conditions|tojson }}</code></td><td><a href="/mails?rule={{ e.name|urlencode }}">{{ stats.get(e.name, 0) }}</a></td></tr>
+    {% else %}
+    <tr class="learned"><td>{{ loop.index }}</td><td colspan="5"><i>↳ hier werden die {{ learned|length }} gelernten Regeln geprüft</i></td></tr>
+    {% endif %}
+  {% endfor %}
+  <tr><td></td><td>Standard</td><td>{{ action_badge(ruleset.defaults.get('action', 'review')) }}</td><td></td><td><i>keine Regel passt</i></td><td><a href="/mails?rule=Standard">{{ stats.get('Standard', 0) }}</a></td></tr>
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Gelernte Regeln</h2>
+<table class="mails">
+  <thead><tr><th>Typ</th><th>Muster</th><th>Aktion</th><th>Auto</th><th>Notiz</th><th></th></tr></thead>
+  <tbody>
+  {% for r in learned %}
+    <tr><td>{{ 'E-Mail' if r.kind == 'email' else 'Domain' }}</td><td>{{ r.pattern }}</td><td>{{ action_badge(r.action) }}</td><td>{{ '✔' if r.auto }}</td><td>{{ r.note }}</td>
+      <td><form method="post" action="/rules/learned/{{ r.id }}/delete"><button class="ghost">löschen</button></form></td></tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">Noch keine – in der Mail-Ansicht „Für die Zukunft merken“ wählen.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<details><summary>rules.yaml anzeigen</summary><pre class="body">{{ source }}</pre></details>
+{% endblock %}

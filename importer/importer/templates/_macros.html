@@ -1,0 +1,12 @@
+{% macro status_badge(status) -%}
+<span class="badge st-{{ status }}">{{ Status.LABELS.get(status, status) }}</span>
+{%- endmacro %}
+{% macro action_badge(action) -%}
+{% if action %}<span class="badge ac-{{ action }}">{{ Action.LABELS.get(action, action) }}</span>{% endif %}
+{%- endmacro %}
+{% macro lead_link(id) -%}
+<a href="{{ odoo_url }}/web#id={{ id }}&model=crm.lead&view_type=form" target="_blank" rel="noopener">Lead #{{ id }} ↗</a>
+{%- endmacro %}
+{% macro partner_link(id) -%}
+<a href="{{ odoo_url }}/web#id={{ id }}&model=res.partner&view_type=form" target="_blank" rel="noopener">Kontakt #{{ id }} ↗</a>
+{%- endmacro %}

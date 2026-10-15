@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Protokoll{% endblock %}
+{% block content %}
+<h1>Protokoll</h1>
+<table class="mails">
+  <thead><tr><th>#</th><th>Job</th><th>Start</th><th>Ende</th><th>Ergebnis</th></tr></thead>
+  <tbody>
+  {% for j in logs %}
+    <tr><td>{{ j.id }}</td><td>{{ j.job }}</td><td class="nowrap">{{ j.started_at.strftime('%d.%m.%Y %H:%M:%S') }}</td>
+      <td class="nowrap">{{ j.finished_at.strftime('%H:%M:%S') if j.finished_at else 'läuft…' }}</td>
+      <td class="{{ 'ok' if j.ok else 'err' if j.ok is not none }}">{{ j.summary }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
