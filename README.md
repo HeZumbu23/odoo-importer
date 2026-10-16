@@ -97,3 +97,9 @@ Die Tests laufen ohne Docker und ohne Odoo (eingebauter Fake-IMAP-Server `tests/
 * Test-Zugangsdaten (`admin/admin`, ohne IMAP-TLS) sind nur für lokale Tests – vor produktivem Einsatz ändern, Odoo-Admin-Passwort setzen und nicht öffentlich exponieren.
 * Vor dem ersten Massenimport auf dem Produktivsystem: zuerst Testinstanz/Kopie, zuerst mit `fetch --limit` kleine Mengen prüfen.
 * Anhänge >`max_size_mb` (Standard 40 MB) werden nicht abgerufen und als Fehler markiert.
+
+## Browser-Tests (Playwright)
+
+Die Oberfläche hat stabile Test-Hooks (`data-testid`, z. B. `job-fetch`, `mail-row`, `action-new_lead`, `lead-search`,
+`submit-approve`) und ARIA-Labels. Während ein Lauf aktiv ist, steht `data-running` am `<body>` (Zustand abwarten:
+`expect(page.locator("body")).to_have_attribute("data-running", "")`). Beispiel: `importer/tests/test_e2e.py`.

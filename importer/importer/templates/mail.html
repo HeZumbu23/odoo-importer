@@ -6,10 +6,10 @@
 <p class="navrow"><a href="{{ back }}">← zurück zur Liste</a>
   <span class="grow"></span>
   {% if pending_total %}<small>{{ pending_total }} Mails zu prüfen</small>{% endif %}
-  {% if next_id %}<a class="btnlink" href="/mails/{{ next_id }}">Nächste offene Mail →</a>{% endif %}</p>
+  {% if next_id %}<a class="btnlink" data-testid="next-mail" href="/mails/{{ next_id }}">Nächste offene Mail →</a>{% endif %}</p>
 <div class="detail">
   <article class="mailview">
-    <h1>{{ mail.subject or '(ohne Betreff)' }}</h1>
+    <h1 data-testid="mail-subject">{{ mail.subject or '(ohne Betreff)' }}</h1>
     <table class="kv">
       <tr><th>Von</th><td>{{ mail.from_name }} &lt;{{ mail.from_email }}&gt;</td></tr>
       <tr><th>An</th><td>{% for n, a in mail.to_addrs %}{{ n }} &lt;{{ a }}&gt;{{ ', ' if not loop.last }}{% endfor %}</td></tr>
@@ -20,11 +20,11 @@
       {% if mail.in_reply_to %}<tr><th>Antwort auf</th><td><code>{{ mail.in_reply_to }}</code></td></tr>{% endif %}
       {% if mail.attachments %}<tr><th>Anhänge</th><td>{% for a in mail.attachments %}{{ a.filename }} <small>({{ a.content_type }}, {{ (a.size / 1024)|round(1) }} KB)</small><br>{% endfor %}</td></tr>{% endif %}
     </table>
-    <pre class="body">{{ mail.body_text }}</pre>
+    <pre class="body" data-testid="mail-body">{{ mail.body_text }}</pre>
     <p><a href="/mails/{{ mail.id }}/raw">Original (.eml) herunterladen</a></p>
   </article>
 
-  <aside class="decision">
+  <aside class="decision" data-testid="decision" data-status="{{ mail.status }}">
     <h2>Entscheidung {{ status_badge(mail.status) }}</h2>
     <p class="reason">{{ action_badge(mail.action) }} <small>{{ mail.reason or '' }}</small></p>
     {% if mail.error %}<p class="err">{{ mail.error }}</p>{% endif %}
@@ -38,13 +38,13 @@
     <form method="post" action="/mails/{{ mail.id }}">
       <fieldset class="actions">
         {% for a in Action.ALL %}
-        <label><input type="radio" name="action" value="{{ a }}" {{ 'checked' if mail.action == a or (not mail.action and a == 'review') }}> {{ Action.LABELS[a] }}</label>
+        <label><input type="radio" name="action" value="{{ a }}" data-testid="action-{{ a }}" {{ 'checked' if mail.action == a or (not mail.action and a == 'review') }}> {{ Action.LABELS[a] }}</label>
         {% endfor %}
       </fieldset>
 
       <div class="picker" id="picker">
         <div class="pickhead">Ziel-Lead <small>(bei „An Lead anhängen“)</small></div>
-        <input type="hidden" name="target_lead_id" id="target_lead_id" value="{{ mail.target_lead_id or '' }}">
+        <input type="hidden" name="target_lead_id" id="target_lead_id" data-testid="target-lead-id" value="{{ mail.target_lead_id or '' }}">
         <div id="chosen" class="chosen" {% if not mail.target_lead_id %}hidden{% endif %}>
           <span id="chosen_text">Lead #{{ mail.target_lead_id }}</span>
           {% if mail.target_lead_id %}<a href="{{ odoo_url }}/web#id={{ mail.target_lead_id }}&model=crm.lead&view_type=form" target="_blank" rel="noopener">in Odoo ↗</a>{% endif %}
@@ -59,34 +59,34 @@
           {% endfor %}</ul>
         </div>
         {% elif odoo_error %}<p class="err"><small>Odoo nicht erreichbar: {{ odoo_error }}</small></p>{% endif %}
-        <input type="search" id="lead_q" placeholder="Lead suchen: Titel, Kontakt, Firma, E-Mail oder ID …" autocomplete="off">
-        <ul id="lead_results" class="results"></ul>
+        <input type="search" id="lead_q" data-testid="lead-search" aria-label="Lead suchen" placeholder="Lead suchen: Titel, Kontakt, Firma, E-Mail oder ID …" autocomplete="off">
+        <ul id="lead_results" class="results" data-testid="lead-results" aria-live="polite"></ul>
       </div>
 
       <label>Lead-Titel (bei „Neuer Lead“)
-        <input name="lead_name" value="{{ (mail.options or {}).get('lead_name') or '' }}" placeholder="{{ (mail.options or {}).get('lead', {}).get('name', '{subject}') }}">
+        <input name="lead_name" data-testid="lead-name" aria-label="Lead-Titel" value="{{ (mail.options or {}).get('lead_name') or '' }}" placeholder="{{ (mail.options or {}).get('lead', {}).get('name', '{subject}') }}">
       </label>
       <fieldset class="contact">
-        <legend><label><input type="checkbox" name="create_contact" value="1" {{ 'checked' if (mail.options or {}).get('create_contact', True) }}> Kontakt anlegen / zuordnen</label></legend>
-        <label>E-Mail <input name="contact_email" value="{{ ex.get('email', '') }}" placeholder="{{ mail.counterpart_email }}"></label>
-        <label>Name <input name="contact_name" value="{{ ex.get('contact_name', '') }}" placeholder="{{ mail.counterpart_name }}"></label>
-        <label>Firma <input name="partner_name" value="{{ ex.get('partner_name', '') }}" placeholder="optional"></label>
+        <legend><label><input type="checkbox" name="create_contact" value="1" data-testid="create-contact" {{ 'checked' if (mail.options or {}).get('create_contact', True) }}> Kontakt anlegen / zuordnen</label></legend>
+        <label>E-Mail <input name="contact_email" data-testid="contact-email" value="{{ ex.get('email', '') }}" placeholder="{{ mail.counterpart_email }}"></label>
+        <label>Name <input name="contact_name" data-testid="contact-name" value="{{ ex.get('contact_name', '') }}" placeholder="{{ mail.counterpart_name }}"></label>
+        <label>Firma <input name="partner_name" data-testid="partner-name" value="{{ ex.get('partner_name', '') }}" placeholder="optional"></label>
         {% if ex.get('phone') %}<small>Telefon (extrahiert): {{ ex.phone }}</small>{% endif %}
       </fieldset>
 
       <fieldset class="learn">
         <legend>Für die Zukunft merken</legend>
         <label><input type="radio" name="learn" value="" checked> nein</label>
-        <label><input type="radio" name="learn" value="email"> immer für {{ mail.counterpart_email or '–' }}</label>
-        <label><input type="radio" name="learn" value="domain"> immer für @{{ mail.counterpart_domain or '–' }}</label>
+        <label><input type="radio" name="learn" value="email" data-testid="learn-email"> immer für {{ mail.counterpart_email or '–' }}</label>
+        <label><input type="radio" name="learn" value="domain" data-testid="learn-domain"> immer für @{{ mail.counterpart_domain or '–' }}</label>
         <label><input type="checkbox" name="learn_auto" value="1"> künftig ohne Rückfrage</label>
       </fieldset>
 
       <div class="buttons">
-        <button name="submit" value="approve" class="primary">Freigeben</button>
-        <button name="submit" value="apply_now">Freigeben &amp; sofort übertragen</button>
-        <button name="submit" value="save" class="ghost">Nur speichern</button>
-        <button name="submit" value="ignore" class="ghost">Ignorieren</button>
+        <button name="submit" value="approve" class="primary" data-testid="submit-approve">Freigeben</button>
+        <button name="submit" value="apply_now" data-testid="submit-apply-now">Freigeben &amp; sofort übertragen</button>
+        <button name="submit" value="save" class="ghost" data-testid="submit-save">Nur speichern</button>
+        <button name="submit" value="ignore" class="ghost" data-testid="submit-ignore">Ignorieren</button>
       </div>
     </form>
     {% endif %}
@@ -128,7 +128,7 @@
         if (!data.leads.length) { list.innerHTML = '<li class="muted">keine Treffer</li>'; return; }
         data.leads.forEach(l => {
           const li = document.createElement('li');
-          const b = document.createElement('button'); b.type = 'button'; b.className = 'pick';
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.dataset.testid = 'lead-result'; b.dataset.leadId = l.id;
           b.textContent = '#' + l.id + ' ' + l.name;
           b.onclick = () => choose(l.id, l.name);
           const sm = document.createElement('small');
