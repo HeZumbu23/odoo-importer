@@ -115,3 +115,14 @@ def test_db_connect_retries_then_fails(monkeypatch, caplog):
         make_session_factory("postgresql+psycopg://u:p@does-not-exist.invalid:5432/x")
     msgs = [r.message for r in caplog.records if "nicht erreichbar" in r.message]
     assert len(msgs) == 2 and "does-not-exist.invalid:5432" in msgs[0]
+
+
+def test_filter_status_and_action(env):
+    app, _ = env
+    classified(env)
+    c = TestClient(create_app(app), headers={"Authorization": "Basic dTpw"})
+    page = c.get("/mails?status=pending&action=new_lead").text
+    assert 'data-testid="action-chip-new_lead"' in page
+    rows = page.count('data-testid="mail-row"')
+    assert rows >= 1 and page.count('data-action="new_lead"') == rows
+    assert 'data-status="ignored"' not in page

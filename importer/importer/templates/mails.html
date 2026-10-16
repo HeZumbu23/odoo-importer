@@ -9,15 +9,25 @@
   {% endfor %}
 </div>
 
+<div class="counts" data-testid="action-counts" aria-label="Vorschlag">
+  <span class="lbl">Vorschlag:</span>
+  {% set base = '/mails?' ~ ('status=' ~ f.status ~ '&' if f.status else '') %}
+  <a href="{{ base }}{{ 'q=' ~ f.q ~ '&' if f.q }}{{ 'account=' ~ f.account if f.account }}" class="{{ 'active' if not f.action }}">alle <b>{{ action_counts.values()|sum }}</b></a>
+  {% for a in Action.ALL %}
+  <a href="{{ base }}action={{ a }}{{ '&q=' ~ f.q if f.q }}{{ '&account=' ~ f.account if f.account }}" class="{{ 'active' if f.action == a }}" data-testid="action-chip-{{ a }}">{{ Action.LABELS[a] }} <b>{{ action_counts.get(a, 0) }}</b></a>
+  {% endfor %}
+  {% if action_counts.get(None) %}<span class="lbl">ohne Vorschlag <b>{{ action_counts.get(None) }}</b></span>{% endif %}
+</div>
+
 <form class="filters" method="get" action="/mails">
   <input type="search" name="q" data-testid="filter-q" aria-label="Suche" value="{{ f.q }}" placeholder="Betreff / Absender suchen">
-  <select name="status" data-testid="filter-status" aria-label="Status"><option value="">Status: alle</option>
+  <select name="status" onchange="this.form.submit()" data-testid="filter-status" aria-label="Status"><option value="">Status: alle</option>
     {% for st in Status.ALL %}<option value="{{ st }}" {{ 'selected' if f.status == st }}>{{ Status.LABELS[st] }}</option>{% endfor %}</select>
-  <select name="action" data-testid="filter-action" aria-label="Aktion"><option value="">Aktion: alle</option>
+  <select name="action" onchange="this.form.submit()" data-testid="filter-action" aria-label="Aktion"><option value="">Aktion: alle</option>
     {% for a in Action.ALL %}<option value="{{ a }}" {{ 'selected' if f.action == a }}>{{ Action.LABELS[a] }}</option>{% endfor %}</select>
-  <select name="rule" data-testid="filter-rule" aria-label="Regel"><option value="">Regel: alle</option>
+  <select name="rule" onchange="this.form.submit()" data-testid="filter-rule" aria-label="Regel"><option value="">Regel: alle</option>
     {% for r in rules %}<option {{ 'selected' if f.rule == r }}>{{ r }}</option>{% endfor %}</select>
-  <select name="account" data-testid="filter-account" aria-label="Konto"><option value="">Konto: alle</option>
+  <select name="account" onchange="this.form.submit()" data-testid="filter-account" aria-label="Konto"><option value="">Konto: alle</option>
     {% for a in accounts %}<option {{ 'selected' if f.account == a }}>{{ a }}</option>{% endfor %}</select>
   <button>Filtern</button>
 </form>

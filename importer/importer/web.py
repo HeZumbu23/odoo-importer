@@ -83,12 +83,16 @@ def create_app(app_state: App | None = None) -> FastAPI:
             rows = list(s.scalars(q.order_by(Mail.date.asc().nulls_first(), Mail.id)
                                   .offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)))
             counts = dict(s.execute(select(Mail.status, func.count()).group_by(Mail.status)).all())
+            aq = select(Mail.action, func.count()).group_by(Mail.action)
+            if f.get("status"):
+                aq = aq.where(Mail.status == f["status"])
+            action_counts = dict(s.execute(aq).all())
             rules = [r for (r,) in s.execute(select(Mail.rule).where(Mail.rule.is_not(None)).distinct().order_by(Mail.rule))]
             accounts = [a for (a,) in s.execute(select(Mail.account).distinct().order_by(Mail.account))]
         pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
         qs = urlencode({k: v for k, v in f.items() if v})
         return render(request, "mails.html", mails=rows, f=f, total=total, page=page, pages=pages, qs=qs,
-                      counts=counts, rules=rules, accounts=accounts)
+                      counts=counts, action_counts=action_counts, rules=rules, accounts=accounts)
 
     @ui.post("/mails/bulk")
     async def bulk(request: Request):
