@@ -18,7 +18,7 @@ IMAP-Postfächer ──① abrufen──▶ Staging-DB (Postgres) ──② Rege
 | `db`       | PostgreSQL (Odoo + Staging-Datenbank des Importers) |
 | `odoo`     | Odoo-Testinstanz (18.0, per `ODOO_VERSION=19.0` auch 19) mit CRM; `odoo-init` installiert `crm`+`contacts` |
 | `imap`     | Dovecot-IMAP-Server mit Testpostfächern `archiv` und `vertrieb` (zum Üben und als Archiv-Ziel für `imapsync`) |
-| `importer` | Weboberfläche + Worker (FastAPI) – Port 8000 |
+| `importer` | Weboberfläche + Worker (FastAPI) – Port 8090 |
 | `tools/Test-OdooApi.ps1` | PowerShell-Skript: prüft das **Produktivsystem** auf verfügbare APIs (siehe unten) |
 
 ## Schnellstart
@@ -30,7 +30,7 @@ docker compose exec importer python -m importer seed         # Testdaten in Odoo
 docker compose exec importer python -m importer cycle        # abrufen + Regeln + freigegebene übertragen
 ```
 
-* Importer: <http://localhost:8000> (Login `admin` / `admin`, über `UI_USER`/`UI_PASSWORD`)
+* Importer: <http://localhost:8090> (Login `admin` / `admin`, über `UI_USER`/`UI_PASSWORD`)
 * Odoo: <http://localhost:8069> (Datenbank `odoo`, Login `admin` / `admin`)
 * IMAP: `localhost:1143` (`archiv`/`archiv`, `vertrieb`/`vertrieb`, ohne TLS – nur Test!)
 

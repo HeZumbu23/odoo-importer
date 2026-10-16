@@ -103,7 +103,7 @@ services:
       RULES_FILE: /config/rules.yaml
       DATA_DIR: /data
     ports:
-      - "${IMPORTER_PORT:-8000}:8000"
+      - "${IMPORTER_PORT:-8090}:8000"
     volumes:
       - ./importer/config:/config
       - importer-data:/data
