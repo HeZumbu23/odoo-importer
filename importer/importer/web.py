@@ -69,29 +69,44 @@ def create_app(app_state: App | None = None) -> FastAPI:
         return q
 
     FILTER_KEYS = ("status", "action", "rule", "account", "q")
+    SORT_COLUMNS = {
+        "id": Mail.id, "date": Mail.date, "contact": Mail.counterpart_email, "subject": Mail.subject,
+        "action": Mail.action, "rule": Mail.rule, "status": Mail.status,
+    }
 
     @ui.get("/")
     def index():
         return RedirectResponse("/mails?status=pending", 303)
 
     @ui.get("/mails")
-    def mails(request: Request, page: int = 1):
+    def mails(request: Request, page: int = 1, sort: str = "date", dir: str = "asc"):
         f = {k: request.query_params.get(k, "") for k in FILTER_KEYS}
+        sort = sort if sort in SORT_COLUMNS else "date"
+        dir = "desc" if dir == "desc" else "asc"
+        col = SORT_COLUMNS[sort]
+        order = [col.desc().nulls_last() if dir == "desc" else col.asc().nulls_first(), Mail.id.asc()]
         with state.sessions() as s:
             q = filtered_query(f)
             total = s.scalar(select(func.count()).select_from(q.subquery()))
-            rows = list(s.scalars(q.order_by(Mail.date.asc().nulls_first(), Mail.id)
-                                  .offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)))
+            rows = list(s.scalars(q.order_by(*order).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)))
             counts = dict(s.execute(select(Mail.status, func.count()).group_by(Mail.status)).all())
             aq = select(Mail.action, func.count()).group_by(Mail.action)
             if f.get("status"):
                 aq = aq.where(Mail.status == f["status"])
             action_counts = dict(s.execute(aq).all())
+            rq = select(Mail.rule, func.count()).where(Mail.rule.is_not(None)).group_by(Mail.rule).order_by(Mail.rule)
+            if f.get("status"):
+                rq = rq.where(Mail.status == f["status"])
+            if f.get("action"):
+                rq = rq.where(Mail.action == f["action"])
+            rule_counts = dict(s.execute(rq).all())
             rules = [r for (r,) in s.execute(select(Mail.rule).where(Mail.rule.is_not(None)).distinct().order_by(Mail.rule))]
             accounts = [a for (a,) in s.execute(select(Mail.account).distinct().order_by(Mail.account))]
         pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
         qs = urlencode({k: v for k, v in f.items() if v})
-        return render(request, "mails.html", mails=rows, f=f, total=total, page=page, pages=pages, qs=qs,
+        qs_sort = urlencode({"sort": sort, "dir": dir})
+        return render(request, "mails.html", sort=sort, dir=dir, rule_counts=rule_counts,
+                      qs_sort=qs_sort, mails=rows, f=f, total=total, page=page, pages=pages, qs=qs,
                       counts=counts, action_counts=action_counts, rules=rules, accounts=accounts)
 
     @ui.post("/mails/bulk")

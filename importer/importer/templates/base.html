@@ -18,6 +18,7 @@
     <a href="/jobs">Protokoll</a>
     <a href="{{ odoo_url }}/web" target="_blank" rel="noopener">Odoo ↗</a>
   </nav>
+  <button type="button" class="helpbtn" data-testid="help-open" aria-haspopup="dialog" onclick="document.getElementById('help').showModal()">? Hilfe</button>
 </header>
 <section class="jobbar">
   <form method="post" action="/jobs/fetch"><button data-testid="job-fetch" {% if running %}disabled{% endif %} title="Neue Mails per IMAP abrufen">① Abrufen</button></form>
@@ -32,6 +33,32 @@
     {% endif %}
   </div>
 </section>
+<dialog id="help" data-testid="help-dialog" aria-labelledby="help-title">
+  <h2 id="help-title">Kurzanleitung</h2>
+  <h3>Vorgehen</h3>
+  <ol>
+    <li><b>Abrufen</b> – holt neue Mails aus den Postfächern (liest nur, verändert nichts am Postfach).</li>
+    <li><b>Regeln anwenden</b> – macht zu jeder Mail einen <i>Vorschlag</i>. Eindeutige Fälle werden gleich freigegeben oder ignoriert.</li>
+    <li><b>Prüfen</b> – unter „Zu prüfen“ Mail öffnen und entscheiden: neuer Lead, an Lead anhängen (Lead-Suche), nur Kontakt oder ignorieren. Mit „Freigeben“ weiter zur nächsten Mail.</li>
+    <li><b>Nach Odoo übertragen</b> – schreibt <u>nur freigegebene</u> Mails nach Odoo (Kontakt, Lead, Mail mit Anhängen).</li>
+  </ol>
+  <h3>Status</h3>
+  <table class="kv">
+    <tr><th><span class="badge st-new">neu</span></th><td>abgerufen, noch nicht von den Regeln bearbeitet</td></tr>
+    <tr><th><span class="badge st-pending">zu prüfen</span></th><td>Vorschlag liegt vor, du musst entscheiden</td></tr>
+    <tr><th><span class="badge st-approved">freigegeben</span></th><td>bereit, wird beim nächsten „Nach Odoo übertragen“ geschrieben</td></tr>
+    <tr><th><span class="badge st-done">erledigt</span></th><td>in Odoo angelegt (wird nie doppelt übertragen)</td></tr>
+    <tr><th><span class="badge st-ignored">ignoriert</span></th><td>wird nicht importiert (z. B. Newsletter, Duplikat)</td></tr>
+    <tr><th><span class="badge st-error">Fehler</span></th><td>Abruf oder Übertragung fehlgeschlagen – Grund steht in der Zeile; nach Korrektur erneut freigeben</td></tr>
+  </table>
+  <h3>Tipps</h3>
+  <ul>
+    <li>Filter und Spaltenköpfe (Sortierung) gelten auch für die Sammelaktionen.</li>
+    <li>„Für die Zukunft merken“ legt eine Regel für Absender oder Domain an.</li>
+    <li>Antworten warten automatisch auf ihre Ursprungs-Mail.</li>
+  </ul>
+  <form method="dialog"><button class="primary" data-testid="help-close">Schließen</button></form>
+</dialog>
 <main id="main">
 {% block content %}{% endblock %}
 </main>

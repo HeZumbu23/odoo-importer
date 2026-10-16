@@ -19,7 +19,17 @@
   {% if action_counts.get(None) %}<span class="lbl">ohne Vorschlag <b>{{ action_counts.get(None) }}</b></span>{% endif %}
 </div>
 
+{% macro keep(skip) -%}{% for k in ['status','action','rule','account','q'] if k != skip and f[k] %}&{{ k }}={{ f[k]|urlencode }}{% endfor %}&sort={{ sort }}&dir={{ dir }}{%- endmacro %}
+<div class="counts" data-testid="rule-counts" aria-label="Regel">
+  <span class="lbl">Regel:</span>
+  <a href="/mails?x=1{{ keep('rule') }}" class="{{ 'active' if not f.rule }}">alle</a>
+  {% for r, n in rule_counts.items() %}
+  <a href="/mails?x=1{{ keep('rule') }}&rule={{ r|urlencode }}" class="{{ 'active' if f.rule == r }}" data-testid="rule-chip">{{ r }} <b>{{ n }}</b></a>
+  {% endfor %}
+</div>
+
 <form class="filters" method="get" action="/mails">
+  <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">
   <input type="search" name="q" data-testid="filter-q" aria-label="Suche" value="{{ f.q }}" placeholder="Betreff / Absender suchen">
   <select name="status" onchange="this.form.submit()" data-testid="filter-status" aria-label="Status"><option value="">Status: alle</option>
     {% for st in Status.ALL %}<option value="{{ st }}" {{ 'selected' if f.status == st }}>{{ Status.LABELS[st] }}</option>{% endfor %}</select>
@@ -52,8 +62,14 @@
 
   <table class="mails" data-testid="mail-table">
     <thead><tr>
-      <th><input type="checkbox" onclick="document.querySelectorAll('input[name=ids]').forEach(c => c.checked = this.checked)"></th>
-      <th>#</th><th>Datum</th><th>Kontakt</th><th>Betreff</th><th>Vorschlag</th><th>Regel / Grund</th><th>Status</th>
+      <th><input type="checkbox" onclick="document.querySelectorAll('input[name=ids]').forEach(c => c.checked = this.checked)" aria-label="Alle markieren"></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'id' else 'none' }}"><a class="sort" data-testid="sort-id" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=id&dir={{ 'desc' if sort == 'id' and dir == 'asc' else 'asc' }}">#{{ ' ▲' if sort == 'id' and dir == 'asc' else ' ▼' if sort == 'id' }}</a></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'date' else 'none' }}"><a class="sort" data-testid="sort-date" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=date&dir={{ 'desc' if sort == 'date' and dir == 'asc' else 'asc' }}">Datum{{ ' ▲' if sort == 'date' and dir == 'asc' else ' ▼' if sort == 'date' }}</a></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'contact' else 'none' }}"><a class="sort" data-testid="sort-contact" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=contact&dir={{ 'desc' if sort == 'contact' and dir == 'asc' else 'asc' }}">Kontakt{{ ' ▲' if sort == 'contact' and dir == 'asc' else ' ▼' if sort == 'contact' }}</a></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'subject' else 'none' }}"><a class="sort" data-testid="sort-subject" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=subject&dir={{ 'desc' if sort == 'subject' and dir == 'asc' else 'asc' }}">Betreff{{ ' ▲' if sort == 'subject' and dir == 'asc' else ' ▼' if sort == 'subject' }}</a></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'action' else 'none' }}"><a class="sort" data-testid="sort-action" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=action&dir={{ 'desc' if sort == 'action' and dir == 'asc' else 'asc' }}">Vorschlag{{ ' ▲' if sort == 'action' and dir == 'asc' else ' ▼' if sort == 'action' }}</a></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'rule' else 'none' }}"><a class="sort" data-testid="sort-rule" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=rule&dir={{ 'desc' if sort == 'rule' and dir == 'asc' else 'asc' }}">Regel / Grund{{ ' ▲' if sort == 'rule' and dir == 'asc' else ' ▼' if sort == 'rule' }}</a></th>
+      <th aria-sort="{{ ('ascending' if dir == 'asc' else 'descending') if sort == 'status' else 'none' }}"><a class="sort" data-testid="sort-status" href="/mails?x=1{{ keep('') | replace('&sort=' ~ sort ~ '&dir=' ~ dir, '') }}&sort=status&dir={{ 'desc' if sort == 'status' and dir == 'asc' else 'asc' }}">Status{{ ' ▲' if sort == 'status' and dir == 'asc' else ' ▼' if sort == 'status' }}</a></th>
     </tr></thead>
     <tbody>
     {% for m in mails %}
@@ -81,8 +97,8 @@
 </form>
 
 <div class="pager" data-testid="pager">
-  {% if page > 1 %}<a href="/mails?{{ qs }}&page={{ page - 1 }}">← zurück</a>{% endif %}
+  {% if page > 1 %}<a href="/mails?{{ qs }}&{{ qs_sort }}&page={{ page - 1 }}">← zurück</a>{% endif %}
   Seite {{ page }} / {{ pages }} · {{ total }} Mails
-  {% if page < pages %}<a href="/mails?{{ qs }}&page={{ page + 1 }}">weiter →</a>{% endif %}
+  {% if page < pages %}<a href="/mails?{{ qs }}&{{ qs_sort }}&page={{ page + 1 }}">weiter →</a>{% endif %}
 </div>
 {% endblock %}

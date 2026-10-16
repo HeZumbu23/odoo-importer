@@ -126,3 +126,27 @@ def test_filter_status_and_action(env):
     rows = page.count('data-testid="mail-row"')
     assert rows >= 1 and page.count('data-action="new_lead"') == rows
     assert 'data-status="ignored"' not in page
+
+
+def test_sort_and_rule_filter(env):
+    import re
+    app, _ = env
+    classified(env)
+    c = TestClient(create_app(app), headers={"Authorization": "Basic dTpw"})
+    for col in ("id", "date", "contact", "subject", "action", "rule", "status"):
+        for d in ("asc", "desc"):
+            assert c.get(f"/mails?sort={col}&dir={d}").status_code == 200
+    asc = [int(i) for i in re.findall(r'data-mail-id="(\d+)"', c.get("/mails?sort=id&dir=asc").text)]
+    desc = [int(i) for i in re.findall(r'data-mail-id="(\d+)"', c.get("/mails?sort=id&dir=desc").text)]
+    assert asc == sorted(asc) and desc == sorted(desc, reverse=True) and asc != desc
+    assert c.get("/mails?sort=evil;drop&dir=x").status_code == 200  # unbekannte Spalte -> Standard
+    page = c.get("/mails?rule=Newsletter+%2F+Mailingliste").text
+    assert 'data-testid="rule-chip"' in page and page.count("Newsletter / Mailingliste") >= 1
+    assert page.count('data-testid="mail-row"') == 1
+
+
+def test_help_dialog_present(env):
+    app, _ = env
+    c = TestClient(create_app(app), headers={"Authorization": "Basic dTpw"})
+    page = c.get("/mails").text
+    assert 'data-testid="help-dialog"' in page and "nur freigegebene" in page
