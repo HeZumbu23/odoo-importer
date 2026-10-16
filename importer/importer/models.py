@@ -1,7 +1,12 @@
 """Staging database: every fetched mail, its proposed/approved action and the Odoo result."""
 from __future__ import annotations
 
+import logging
+import os
+import socket
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import (
     JSON,
@@ -17,7 +22,11 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
+
+log = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -167,14 +176,37 @@ def _ensure_postgres_database(url: str) -> None:
         admin.dispose()
 
 
+def _describe_host(url: str) -> str:
+    u = make_url(url)
+    try:
+        found = sorted({a[4][0] for a in socket.getaddrinfo(u.host, u.port or 5432, proto=socket.IPPROTO_TCP)})
+        return f"{u.host}:{u.port or 5432} -> {', '.join(found)}"
+    except OSError as exc:
+        return f"{u.host}:{u.port or 5432} -> Namensauflösung fehlgeschlagen ({exc})"
+
+
+def _with_retry(fn, url: str):
+    """Postgres may still be starting (or Docker DNS not ready yet): retry instead of crashing."""
+    attempts = int(os.environ.get("DB_CONNECT_RETRIES", "30"))
+    delay = float(os.environ.get("DB_CONNECT_DELAY", "2"))
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except OperationalError as exc:
+            if attempt == attempts:
+                raise
+            log.warning("Datenbank nicht erreichbar (Versuch %d/%d): %s | %s", attempt, attempts,
+                        str(exc.orig or exc).strip(), _describe_host(url))
+            time.sleep(delay)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     if url.startswith("sqlite:///"):
-        from pathlib import Path
-
         Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(url, connect_args={"check_same_thread": False})
+        Base.metadata.create_all(engine)
     else:
-        _ensure_postgres_database(url)
+        _with_retry(lambda: _ensure_postgres_database(url), url)
         engine = create_engine(url, pool_pre_ping=True)
-    Base.metadata.create_all(engine)
+        _with_retry(lambda: Base.metadata.create_all(engine), url)
     return sessionmaker(engine, expire_on_commit=False)

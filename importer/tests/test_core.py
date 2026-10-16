@@ -105,3 +105,13 @@ def test_web_review_flow(env):
     assert r.status_code == 303
     with app.sessions() as s:
         assert s.query(Mail).filter(Mail.status == Status.PENDING).count() == 0
+
+
+def test_db_connect_retries_then_fails(monkeypatch, caplog):
+    from importer.models import make_session_factory
+    monkeypatch.setenv("DB_CONNECT_RETRIES", "3")
+    monkeypatch.setenv("DB_CONNECT_DELAY", "0")
+    with caplog.at_level("WARNING"), pytest.raises(Exception):
+        make_session_factory("postgresql+psycopg://u:p@does-not-exist.invalid:5432/x")
+    msgs = [r.message for r in caplog.records if "nicht erreichbar" in r.message]
+    assert len(msgs) == 2 and "does-not-exist.invalid:5432" in msgs[0]
