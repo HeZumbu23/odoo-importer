@@ -51,6 +51,22 @@
     <tr><th><span class="badge st-ignored">ignoriert</span></th><td>wird nicht importiert (z. B. Newsletter, Duplikat)</td></tr>
     <tr><th><span class="badge st-error">Fehler</span></th><td>Abruf oder Übertragung fehlgeschlagen – Grund steht in der Zeile; nach Korrektur erneut freigeben</td></tr>
   </table>
+  <h3>Regeln</h3>
+  <p>Regeln machen den Vorschlag. Sie werden von oben nach unten geprüft, <b>die erste passende gewinnt</b>. Mit <i>auto</i> wird der Vorschlag ohne Rückfrage freigegeben, sonst landet die Mail unter „Zu prüfen“. Trifft keine Regel zu, steht dort „Manuell entscheiden“.</p>
+  <table class="kv">
+    <tr><th>Auto-Reply</th><td>Abwesenheitsnotiz → ignorieren (auto)</td></tr>
+    <tr><th>Bounce</th><td>Unzustellbar-Meldung → ignorieren (auto)</td></tr>
+    <tr><th>Newsletter</th><td>Mailingliste (List-Unsubscribe) → ignorieren (auto)</td></tr>
+    <tr><th>Antwort im Thread</th><td>Antwort auf eine Mail mit Lead → an denselben Lead anhängen (auto)</td></tr>
+    <tr><th>Lead-Referenz</th><td><code>[Lead#123]</code> im Betreff → an Lead 123 anhängen (auto)</td></tr>
+    <tr><th>Website-Formular</th><td>Mail vom Kontaktformular → neuer Lead, Name/E-Mail/Telefon/Firma aus dem Text (auto)</td></tr>
+    <tr><th>Interne Mail</th><td>Gegenüber ist eine eigene Adresse → ignorieren (auto)</td></tr>
+    <tr><th>Gelernte Regeln</th><td>aus „Für die Zukunft merken“, gelten vor den folgenden</td></tr>
+    <tr><th>Kunde mit offenem Lead</th><td>→ an dessen Lead anhängen (prüfen)</td></tr>
+    <tr><th>Unbekannter Absender</th><td>→ neuer Lead (prüfen)</td></tr>
+    <tr><th>Bekannter Kontakt, kein Lead</th><td>→ nur Kontakt (prüfen)</td></tr>
+  </table>
+  <p>Eigene Regeln stehen in <code>importer/config/rules.yaml</code> (wird bei jedem Lauf neu gelesen), Übersicht und Trefferzahlen unter „Regeln“.</p>
   <h3>Tipps</h3>
   <ul>
     <li>Filter und Spaltenköpfe (Sortierung) gelten auch für die Sammelaktionen.</li>
