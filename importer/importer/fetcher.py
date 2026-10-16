@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .mailparse import RawStore, parse, sha256
-from .models import FetchState, Mail, Status
+from .models import AccountSetting, FetchState, Mail, Status
 from .settings import Account, Settings
 
 log = logging.getLogger(__name__)
@@ -88,35 +88,85 @@ class FetchStats:
     duplicates: int = 0
     too_large: int = 0
     errors: int = 0
+    skipped: str = ""
 
     def __str__(self) -> str:
+        if self.skipped:
+            return f"übersprungen: {self.skipped}"
         return (f"{self.fetched} neu, {self.duplicates} Duplikate, {self.too_large} zu groß, "
                 f"{self.errors} Fehler ({self.folders} Ordner)")
+
+
+def effective_since(session, settings: Settings, acc: Account):
+    """'Abrufen ab': Einstellung aus der Oberfläche, sonst importer.yaml."""
+    row = session.get(AccountSetting, acc.name)
+    return (row.since if row and row.since else None) or acc.since
+
+
+def _plan_folder(client, session_factory, acc: Account, folder: str, since, rescan: bool, persist: bool):
+    """Select the folder and return (uidvalidity, [uids to fetch])."""
+    info = client.select_folder(folder, readonly=True)
+    uidvalidity = int(info[b"UIDVALIDITY"])
+    with session_factory() as session:
+        state = session.get(FetchState, (acc.name, folder))
+        last_uid = state.last_uid if state else 0
+        if state is not None and state.uidvalidity != uidvalidity:
+            log.warning("UIDVALIDITY von %s/%s geändert - Ordner wird neu gelesen", acc.name, folder)
+            last_uid, rescan = 0, True
+        if rescan:
+            last_uid = 0
+        if persist:
+            if state is None:
+                state = FetchState(account=acc.name, folder=folder, uidvalidity=uidvalidity, last_uid=last_uid)
+                session.add(state)
+            elif state.uidvalidity != uidvalidity or rescan:
+                state.uidvalidity, state.last_uid = uidvalidity, last_uid
+            session.commit()
+        known: set[int] = set()
+        if rescan:  # früher abgerufene UIDs nicht noch einmal anlegen
+            known = set(session.scalars(select(Mail.uid).where(
+                Mail.account == acc.name, Mail.folder == folder, Mail.uidvalidity == uidvalidity)))
+    criteria = ["UID", f"{last_uid + 1}:*"]
+    if since:
+        criteria += ["SINCE", since]
+    uids = sorted(u for u in client.search(criteria) if u > last_uid and u not in known)
+    return uidvalidity, uids
+
+
+def count_account(session_factory, settings: Settings, acc: Account, since) -> dict[str, int]:
+    """Preview: how many mails a fetch would import (nothing is read or stored)."""
+    with session_factory() as session:
+        row = session.get(AccountSetting, acc.name)
+        scanned = row.scanned_since if row else None
+    rescan = scanned is None or (since is not None and since < scanned) or (since is None and scanned is not None)
+    client = connect(acc)
+    try:
+        return {folder: len(_plan_folder(client, session_factory, acc, folder, since, rescan, persist=False)[1])
+                for folder in select_folders(client, acc)}
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
 
 
 def fetch_account(session_factory, store: RawStore, settings: Settings, acc: Account,
                   limit: int | None = None) -> FetchStats:
     stats = FetchStats()
+    with session_factory() as session:
+        since = effective_since(session, settings, acc)
+        row = session.get(AccountSetting, acc.name)
+        scanned = row.scanned_since if row else None
+    if since is None and settings.require_since:
+        stats.skipped = "kein Startdatum – unter „Postfächer“ „Abrufen ab“ setzen"
+        return stats
+    # früheres Startdatum als beim letzten Mal (oder erstmals nach Umstellung): Ordner neu durchsuchen
+    rescan = scanned is None or (since is not None and since < scanned) or (since is None and scanned is not None)
     client = connect(acc)
     try:
         for folder in select_folders(client, acc):
             stats.folders += 1
-            info = client.select_folder(folder, readonly=True)
-            uidvalidity = int(info[b"UIDVALIDITY"])
-            with session_factory() as session:
-                state = session.get(FetchState, (acc.name, folder))
-                if state is None:
-                    state = FetchState(account=acc.name, folder=folder, uidvalidity=uidvalidity, last_uid=0)
-                    session.add(state)
-                elif state.uidvalidity != uidvalidity:
-                    log.warning("UIDVALIDITY von %s/%s geändert - Ordner wird neu gelesen", acc.name, folder)
-                    state.uidvalidity, state.last_uid = uidvalidity, 0
-                session.commit()
-                last_uid = state.last_uid
-            criteria = ["UID", f"{last_uid + 1}:*"]
-            if acc.since:
-                criteria += ["SINCE", acc.since]
-            uids = sorted(u for u in client.search(criteria) if u > last_uid)
+            uidvalidity, uids = _plan_folder(client, session_factory, acc, folder, since, rescan, persist=True)
             if limit is not None:
                 uids = uids[: max(0, limit - stats.fetched)]
             log.info("%s/%s: %d neue Nachrichten", acc.name, folder, len(uids))
@@ -151,10 +201,18 @@ def fetch_account(session_factory, store: RawStore, settings: Settings, acc: Acc
                             session.rollback()
                             stats.errors += 1
                     state = session.get(FetchState, (acc.name, folder))
-                    state.last_uid = max(batch)
+                    state.last_uid = max(state.last_uid, max(batch))
                     session.commit()
             if limit is not None and stats.fetched >= limit:
-                break
+                return stats  # Probelauf: Startdatum-Vermerk nicht setzen
+        with session_factory() as session:  # Ordner vollständig bis `since` gelesen
+            row = session.get(AccountSetting, acc.name) or AccountSetting(account=acc.name)
+            session.add(row)
+            if since is not None and (row.scanned_since is None or since < row.scanned_since):
+                row.scanned_since = since
+            elif since is None:
+                row.scanned_since = None
+            session.commit()
     finally:
         try:
             client.logout()

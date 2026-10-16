@@ -77,3 +77,4 @@ a.sort { color:inherit; text-decoration:none; white-space:nowrap; } a.sort:hover
 dialog#help { max-width:640px; width:calc(100% - 32px); border:1px solid var(--line); border-radius:10px; padding:16px 22px; }
 dialog#help::backdrop { background:rgba(0,0,0,.4); }
 dialog#help h2 { margin-top:0; } dialog#help h3 { margin:14px 0 4px; font-size:14px; }
+form.inline { display:inline; } .countres { margin-top:4px; font-size:13px; color:var(--muted); max-width:340px; white-space:normal; }

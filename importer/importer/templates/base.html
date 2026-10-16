@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Mail-Import{% endblock %} · Odoo Mail Importer</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/style.css">
   {% if running %}<meta http-equiv="refresh" content="3">{% endif %}
 </head>
@@ -14,6 +15,7 @@
     <a href="/mails?status=pending">Zu prüfen</a>
     <a href="/mails?status=approved">Freigegeben</a>
     <a href="/mails">Alle Mails</a>
+    <a href="/accounts">Postfächer</a>
     <a href="/rules">Regeln</a>
     <a href="/jobs">Protokoll</a>
     <a href="{{ odoo_url }}/web" target="_blank" rel="noopener">Odoo ↗</a>
@@ -37,7 +39,7 @@
   <h2 id="help-title">Kurzanleitung</h2>
   <h3>Vorgehen</h3>
   <ol>
-    <li><b>Abrufen</b> – holt neue Mails aus den Postfächern (liest nur, verändert nichts am Postfach).</li>
+    <li><b>Abrufen</b> – holt neue Mails aus den Postfächern (liest nur, verändert nichts am Postfach). Vorher unter <b>Postfächer</b> das Datum „Abrufen ab“ setzen – ohne Datum wird nichts abgerufen, und „Anzahl prüfen“ zeigt vorab, wie viele Mails es wären.</li>
     <li><b>Regeln anwenden</b> – macht zu jeder Mail einen <i>Vorschlag</i>. Eindeutige Fälle werden gleich freigegeben oder ignoriert.</li>
     <li><b>Prüfen</b> – unter „Zu prüfen“ Mail öffnen und entscheiden: neuer Lead, an Lead anhängen (Lead-Suche), nur Kontakt oder ignorieren. Mit „Freigeben“ weiter zur nächsten Mail.</li>
     <li><b>Nach Odoo übertragen</b> – schreibt <u>nur freigegebene</u> Mails nach Odoo (Kontakt, Lead, Mail mit Anhängen).</li>

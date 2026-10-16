@@ -1,4 +1,5 @@
 """Offline tests: parser, IMAP fetch (fake server), rule engine, web UI. No Odoo needed."""
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,8 @@ def env(tmp_path):
     server, store = fake_imap.start({"archiv": "pw", "vertrieb": "pw"})
     port = server.server_address[1]
     accounts = [Account(name=n, host="127.0.0.1", port=port, username=n, password="pw", ssl=False,
-                        folders=["*"], exclude_folders=["Trash"]) for n in ("archiv", "vertrieb")]
+                        folders=["*"], exclude_folders=["Trash"], since=date(2000, 1, 1))
+                for n in ("archiv", "vertrieb")]
     s = Settings(database_url=f"sqlite:///{tmp_path}/t.db", data_dir=tmp_path, config_file=tmp_path / "none.yaml",
                  rules_file=ROOT / "config" / "rules.yaml", odoo_url="http://invalid.invalid", odoo_db="x",
                  odoo_user="x", odoo_password="x", odoo_api="xmlrpc", odoo_public_url="http://odoo.test",
@@ -150,3 +152,50 @@ def test_help_dialog_present(env):
     c = TestClient(create_app(app), headers={"Authorization": "Basic dTpw"})
     page = c.get("/mails").text
     assert 'data-testid="help-dialog"' in page and "nur freigegebene" in page
+
+
+def test_since_required_and_rescan(env):
+    from importer.fetcher import count_account, fetch_all
+    from importer.models import AccountSetting
+    app, s = env
+    mails = seed.build_scenarios(None)
+    seed.append_mails(s, mails)
+    acc = s.account("archiv")
+    # ohne Startdatum wird nichts abgerufen
+    acc.since = None
+    res = fetch_all(app.sessions, app.store, s, only="archiv")
+    assert "kein Startdatum" in str(res["archiv"]) and res["archiv"].fetched == 0
+    # Startdatum in der Zukunft der Testmails (10 Tage zurück): 0 Mails, Vorschau stimmt
+    recent = date.today() - timedelta(days=10)
+    assert sum(count_account(app.sessions, s, acc, recent).values()) == 0
+    with app.sessions() as sess:
+        sess.add(AccountSetting(account="archiv", since=recent))
+        sess.commit()
+    assert fetch_all(app.sessions, app.store, s, only="archiv")["archiv"].fetched == 0
+    # früheres Datum nachtragen: alter Bestand wird nachgeholt, nichts doppelt
+    older = date.today() - timedelta(days=30)
+    preview = sum(count_account(app.sessions, s, acc, older).values())
+    assert preview == 13  # 14 Szenario-Mails minus die mit Lead-Referenz (braucht Odoo-IDs), davon 1 Duplikat
+    with app.sessions() as sess:
+        sess.get(AccountSetting, "archiv").since = older
+        sess.commit()
+    st = fetch_all(app.sessions, app.store, s, only="archiv")["archiv"]
+    assert st.fetched + st.duplicates == preview and st.duplicates == 1 and st.errors == 0
+    again = fetch_all(app.sessions, app.store, s, only="archiv")["archiv"]
+    assert again.fetched == 0 and again.duplicates == 0 and again.errors == 0
+
+
+def test_accounts_page_and_favicon(env):
+    app, _ = env
+    c = TestClient(create_app(app), headers={"Authorization": "Basic dTpw"})
+    page = c.get("/accounts").text
+    assert page.count('data-testid="account-row"') == 2 and 'data-testid="since-input"' in page
+    r = c.post("/accounts/archiv/since", data={"since": "2024-05-01"}, follow_redirects=False)
+    assert r.status_code == 303 and 'value="2024-05-01"' in c.get("/accounts").text
+    assert c.post("/accounts/archiv/since", data={"since": "kaputt"}, follow_redirects=False).status_code == 400
+    assert c.post("/accounts/nope/since", data={"since": ""}, follow_redirects=False).status_code == 404
+    api = c.get("/api/accounts/archiv/count?since=2000-01-01").json()
+    assert api["total"] == 0  # noch nichts in den Postfächern
+    fav = TestClient(create_app(app)).get("/favicon.ico")  # ohne Anmeldung erreichbar
+    assert fav.status_code == 200 and fav.headers["content-type"].startswith("image/svg")
+    assert 'rel="icon"' in page and 'href="/accounts"' in page

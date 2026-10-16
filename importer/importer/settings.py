@@ -60,12 +60,12 @@ class Account:
             username=str(d["username"]),
             password=str(d["password"]),
             port=int(d["port"]) if d.get("port") else None,
-            ssl=bool(d.get("ssl", True)),
-            starttls=bool(d.get("starttls", False)),
+            ssl=_bool(str(d.get("ssl", True)), True),
+            starttls=_bool(str(d.get("starttls", False)), False),
             folders=list(d.get("folders") or ["INBOX"]),
             exclude_folders=list(d.get("exclude_folders") or []),
             since=since or None,
-            enabled=bool(d.get("enabled", True)),
+            enabled=_bool(str(d.get("enabled", True)), True),
         )
 
 
@@ -90,6 +90,7 @@ class Settings:
     batch_size: int = 100
     max_size_mb: int = 40
     apply_batch: int = 200
+    require_since: bool = True
 
     @classmethod
     def load(cls) -> "Settings":
@@ -117,6 +118,7 @@ class Settings:
             fetch = cfg.get("fetch") or {}
             s.batch_size = int(fetch.get("batch_size", s.batch_size))
             s.max_size_mb = int(fetch.get("max_size_mb", s.max_size_mb))
+            s.require_since = bool(fetch.get("require_since", s.require_since))
             s.apply_batch = int((cfg.get("apply") or {}).get("batch_size", s.apply_batch))
         return s
 

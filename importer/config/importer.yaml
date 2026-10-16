@@ -7,6 +7,7 @@ own_domains:
 fetch:
   batch_size: 100      # Nachrichten pro IMAP-FETCH
   max_size_mb: 40      # größere Nachrichten werden nicht abgerufen (Status "Fehler")
+  require_since: true  # Postfächer ohne "Abrufen ab"-Datum werden nicht abgerufen (Schutz vor Komplettimport)
 
 apply:
   batch_size: 200
@@ -21,6 +22,7 @@ accounts:
     password: ${IMAP_ARCHIV_PASSWORD:-archiv}
     folders: ["*"]                     # alle Ordner; Glob-Muster wie "Archiv/*" möglich
     exclude_folders: [Trash, Junk, Drafts, "Trash/*"]
+    since: 2000-01-01                  # Testpostfach: alles
 
   - name: vertrieb
     host: ${IMAP_HOST:-imap}
@@ -29,15 +31,38 @@ accounts:
     username: ${IMAP_VERTRIEB_USER:-vertrieb}
     password: ${IMAP_VERTRIEB_PASSWORD:-vertrieb}
     folders: [INBOX, Sent]
+    since: 2000-01-01
 
-  # Beispiel: echtes Postfach (z.B. Exchange/M365 per IMAP, Strato, IONOS ...)
-  - name: produktiv
-    enabled: false
-    host: ${PROD_IMAP_HOST:-imap.example.com}
-    port: 993
-    ssl: true
-    username: ${PROD_IMAP_USER:-}
-    password: ${PROD_IMAP_PASSWORD:-}
-    folders: [INBOX, "Gesendete Elemente", "Archiv/*"]
-    exclude_folders: ["Gelöschte Elemente", "Junk-E-Mail", Entwürfe]
-    since: 2022-01-01                  # optional: nur Mails ab diesem Datum
+  # ---- Externe Postfächer (bis zu drei, Zugangsdaten in .env) --------------------------------
+  # Aktivieren: MAILn_ENABLED=true plus MAILn_HOST/USER/PASSWORD in .env, dann `docker compose up -d importer`.
+  # Ohne "Abrufen ab"-Datum (Seite "Postfächer") wird nichts abgerufen.
+  # Hinweis: Microsoft 365/Gmail erlauben IMAP meist nur mit App-Passwort oder OAuth (nicht mit dem normalen Passwort).
+  - name: extern1
+    enabled: ${MAIL1_ENABLED:-false}
+    host: ${MAIL1_HOST:-imap.example.com}
+    port: ${MAIL1_PORT:-993}
+    ssl: ${MAIL1_SSL:-true}
+    username: ${MAIL1_USER:-}
+    password: ${MAIL1_PASSWORD:-}
+    folders: ["*"]
+    exclude_folders: [Trash, Junk, Drafts, Spam, "Gelöschte Elemente", "Junk-E-Mail", Entwürfe, "Papierkorb"]
+
+  - name: extern2
+    enabled: ${MAIL2_ENABLED:-false}
+    host: ${MAIL2_HOST:-imap.example.com}
+    port: ${MAIL2_PORT:-993}
+    ssl: ${MAIL2_SSL:-true}
+    username: ${MAIL2_USER:-}
+    password: ${MAIL2_PASSWORD:-}
+    folders: ["*"]
+    exclude_folders: [Trash, Junk, Drafts, Spam, "Gelöschte Elemente", "Junk-E-Mail", Entwürfe, "Papierkorb"]
+
+  - name: extern3
+    enabled: ${MAIL3_ENABLED:-false}
+    host: ${MAIL3_HOST:-imap.example.com}
+    port: ${MAIL3_PORT:-993}
+    ssl: ${MAIL3_SSL:-true}
+    username: ${MAIL3_USER:-}
+    password: ${MAIL3_PASSWORD:-}
+    folders: ["*"]
+    exclude_folders: [Trash, Junk, Drafts, Spam, "Gelöschte Elemente", "Junk-E-Mail", Entwürfe, "Papierkorb"]

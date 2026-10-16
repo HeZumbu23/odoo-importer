@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Postfächer{% endblock %}
+{% block content %}
+<h1>Postfächer</h1>
+<p>Es werden nur Mails <b>ab dem Datum „Abrufen ab“</b> geholt{% if require_since %}; ohne Datum wird ein Postfach <b>nicht</b> abgerufen{% endif %}.
+  Ein früheres Datum später nachtragen ist möglich – bereits importierte Mails werden nicht doppelt angelegt.
+  Postfächer werden in <code>importer/config/importer.yaml</code> und <code>.env</code> eingerichtet.</p>
+<table class="mails" data-testid="account-table">
+  <thead><tr><th>Postfach</th><th>Server</th><th>Abrufen ab</th><th>Bereits abgerufen</th><th>Aktionen</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr data-testid="account-row" data-account="{{ r.acc.name }}">
+      <td><b>{{ r.acc.name }}</b>{% if not r.acc.enabled %}<br><small>deaktiviert</small>{% endif %}</td>
+      <td>{{ r.acc.username or '–' }}<br><small>{{ r.acc.host }}:{{ r.acc.port or (993 if r.acc.ssl else 143) }} {{ 'SSL' if r.acc.ssl else 'ohne SSL' }}</small></td>
+      <td>
+        <form method="post" action="/accounts/{{ r.acc.name }}/since" class="inline">
+          <input type="date" name="since" value="{{ r.since or '' }}" data-testid="since-input" aria-label="Abrufen ab für {{ r.acc.name }}">
+          <button data-testid="since-save">Speichern</button>
+        </form>
+        {% if not r.since %}<small class="err">kein Datum – wird nicht abgerufen</small>{% endif %}
+      </td>
+      <td>{{ r.total }} Mails{% if r.counts %}<br><small>{% for st, n in r.counts.items() %}{{ Status.LABELS.get(st, st) }} {{ n }}{{ ', ' if not loop.last }}{% endfor %}</small>{% endif %}</td>
+      <td class="nowrap">
+        <button type="button" class="countbtn" data-testid="count-btn" data-account="{{ r.acc.name }}" {% if not r.acc.enabled %}disabled{% endif %}>Anzahl prüfen</button>
+        <form method="post" action="/accounts/{{ r.acc.name }}/fetch" class="inline">
+          <button class="primary" data-testid="fetch-btn" {% if not r.acc.enabled or running %}disabled{% endif %}>Jetzt abrufen</button>
+        </form>
+        <div class="countres" data-testid="count-result" role="status" aria-live="polite"></div>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<script>
+document.querySelectorAll('.countbtn').forEach(btn => btn.addEventListener('click', async () => {
+  const row = btn.closest('tr'), out = row.querySelector('.countres');
+  const since = row.querySelector('[name=since]').value;
+  out.textContent = 'zähle …';
+  try {
+    const r = await fetch('/api/accounts/' + encodeURIComponent(btn.dataset.account) + '/count?since=' + encodeURIComponent(since));
+    const d = await r.json();
+    if (d.error) { out.textContent = d.error; out.className = 'countres err'; return; }
+    out.className = 'countres';
+    out.textContent = d.total + ' Mails würden abgerufen: ' + Object.entries(d.folders).map(([f, n]) => f + ' ' + n).join(', ');
+  } catch (e) { out.textContent = 'Zählung fehlgeschlagen'; out.className = 'countres err'; }
+}));
+</script>
+{% endblock %}

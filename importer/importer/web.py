@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -14,8 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
 
+from .fetcher import count_account
 from .jobs import App
-from .models import Action, JobLog, LearnedRule, Mail, Status
+from .models import AccountSetting, Action, JobLog, LearnedRule, Mail, Status
 
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
@@ -304,7 +306,69 @@ def create_app(app_state: App | None = None) -> FastAPI:
 
     @api.get("/favicon.ico", include_in_schema=False)
     def favicon():
-        return Response(status_code=204)
+        return Response((HERE / "static" / "favicon.svg").read_bytes(), media_type="image/svg+xml",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+    def _parse_date(value: str):
+        value = (value or "").strip()
+        if not value:
+            return None
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            raise HTTPException(400, "Datum bitte als JJJJ-MM-TT angeben")
+
+    @ui.get("/accounts")
+    def accounts_page(request: Request):
+        with state.sessions() as s:
+            settings_rows = {r.account: r for r in s.scalars(select(AccountSetting))}
+            counts: dict[str, dict] = {}
+            for acc, st, n in s.execute(select(Mail.account, Mail.status, func.count()).group_by(Mail.account, Mail.status)):
+                counts.setdefault(acc, {})[st] = n
+            rows = []
+            for acc in state.settings.accounts:
+                over = settings_rows.get(acc.name)
+                rows.append({
+                    "acc": acc, "since": (over.since if over and over.since else None) or acc.since,
+                    "since_override": over.since if over else None, "counts": counts.get(acc.name, {}),
+                    "total": sum(counts.get(acc.name, {}).values()),
+                })
+        return render(request, "accounts.html", rows=rows, require_since=state.settings.require_since)
+
+    @ui.post("/accounts/{name}/since")
+    def accounts_since(name: str, since: str = Form("")):
+        try:
+            state.settings.account(name)
+        except KeyError:
+            raise HTTPException(404)
+        value = _parse_date(since)
+        with state.sessions() as s:
+            row = s.get(AccountSetting, name) or AccountSetting(account=name)
+            row.since = value
+            s.add(row)
+            s.commit()
+        return RedirectResponse("/accounts", 303)
+
+    @ui.post("/accounts/{name}/fetch")
+    def accounts_fetch(name: str):
+        try:
+            state.settings.account(name)
+        except KeyError:
+            raise HTTPException(404)
+        state.run_in_background("fetch", state.fetch, account=name)
+        return RedirectResponse("/accounts", 303)
+
+    @ui.get("/api/accounts/{name}/count")
+    def accounts_count(name: str, since: str = ""):
+        try:
+            acc = state.settings.account(name)
+        except KeyError:
+            raise HTTPException(404)
+        try:
+            per_folder = count_account(state.sessions, state.settings, acc, _parse_date(since))
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=502)
+        return {"folders": per_folder, "total": sum(per_folder.values())}
 
     @ui.get("/robots.txt", include_in_schema=False)
     def robots():

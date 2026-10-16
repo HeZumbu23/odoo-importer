@@ -62,10 +62,16 @@ Wird bei jedem Lauf neu geladen; die ausführliche Syntax steht als Kommentar im
 Auto-Replies, Bounces, Newsletter, Threads, `[Lead#123]` im Betreff, Website-Kontaktformular (Felder aus dem Text extrahieren),
 interne Mails und „Kunde hat offenen Lead“. `AUTO_APPROVE=false` schaltet jede automatische Freigabe ab.
 
-## Postfächer (`importer/config/importer.yaml`)
+## Postfächer (Seite „Postfächer“, `importer/config/importer.yaml`)
 
-Mehrere Konten mit Ordner-Globs, Ausschlüssen und optionalem `since:`. Echte Postfächer: Konto `produktiv` aktivieren
-(`enabled: true`) und Zugangsdaten in `.env` setzen. Bestehende Archive (mbox/eml) lädst du in das Dovecot-Archiv:
+* **„Abrufen ab“:** Pro Postfach wird nur ab diesem Datum abgerufen; ohne Datum passiert nichts (`fetch.require_since`). So wird nie
+  versehentlich ein ganzes Archiv importiert. **Anzahl prüfen** zeigt vorab, wie viele Mails es wären (liest nichts, speichert nichts).
+  Ein früheres Datum später nachtragen holt den älteren Bestand nach, ohne etwas doppelt anzulegen.
+* **Externe Postfächer:** drei Plätze `extern1`–`extern3` sind vorbereitet. In `.env` setzen: `MAIL1_ENABLED=true`, `MAIL1_HOST`, `MAIL1_PORT` (993),
+  `MAIL1_SSL=true`, `MAIL1_USER`, `MAIL1_PASSWORD` (für Nr. 2/3 `MAIL2_…`, `MAIL3_…`), dann `docker compose up -d importer`.
+  Weitere Postfächer: Block in `importer.yaml` kopieren. Microsoft 365/Gmail erlauben IMAP meist nur mit App-Passwort/OAuth.
+  Der Importer liest nur (`BODY.PEEK`), im Postfach wird nichts verändert.
+* Bestehende Archive (mbox/eml) lädst du in das Dovecot-Archiv:
 
 ```bash
 docker compose exec importer python -m importer upload /import/export.mbox --account archiv --folder Archiv/2023

@@ -5,13 +5,14 @@ import logging
 import os
 import socket
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -134,6 +135,16 @@ class FetchState(Base):
     uidvalidity: Mapped[int] = mapped_column(BigInteger)
     last_uid: Mapped[int] = mapped_column(BigInteger, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class AccountSetting(Base):
+    """Per-mailbox settings changed in the UI (override importer.yaml)."""
+
+    __tablename__ = "account_setting"
+
+    account: Mapped[str] = mapped_column(String(100), primary_key=True)
+    since: Mapped[date | None] = mapped_column(Date)          # nur Mails ab diesem Datum abrufen
+    scanned_since: Mapped[date | None] = mapped_column(Date)  # frühestes Datum, bis zu dem schon gelesen wurde
 
 
 class LearnedRule(Base):
